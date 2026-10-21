@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B151F">
+<title>Карта мест</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<style>
+  :root {
+    --ink:#0F1E2B;
+    --ink-2:#1B2F42;
+    --paper:#070D13;
+    --panel:#0E1823;
+    --cell:#1E3852;
+    --cell-edge:#3E6A94;
+    --signal:#FFC400;
+    --muted:#7C92A7;
+    --num:'Barlow Condensed','Arial Narrow',system-ui,sans-serif;
+    --txt:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    body {
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--txt); display:flex; flex-direction:column; min-height:100vh; min-height:100dvh; overflow-x:hidden;
+  }
+
+  /* ---------- верхняя панель ---------- */
+  header {
+    background:#0B151F; color:#fff; border-bottom:1px solid #16293A;
+    padding:calc(env(safe-area-inset-top) + 12px) 16px 14px;
+    flex:none;
+  }
+  .field { display:flex; align-items:center; gap:10px; border-bottom:3px solid var(--signal); padding-bottom:2px; }
+  .field span { font-family:var(--num); font-size:34px; font-weight:600; color:var(--muted); line-height:1; }
+  #q {
+    flex:1; min-width:0; background:transparent; border:0; outline:0; color:#fff;
+    font-family:var(--num); font-weight:700; font-size:52px; line-height:1.1; letter-spacing:.02em;
+    padding:0; caret-color:var(--signal);
+  }
+  #q::placeholder { color:#4A6075; font-weight:600; }
+  #clear {
+    width:36px; height:36px; border-radius:50%; border:0; background:#1B2F42; color:#fff;
+    font-size:18px; cursor:pointer; display:none; flex:none;
+  }
+  #clear:focus-visible, #q:focus-visible, #reset:focus-visible { outline:3px solid var(--signal); outline-offset:3px; }
+  #result { margin-top:12px; min-height:46px; display:flex; align-items:center; gap:12px; font-size:16px; line-height:1.25; }
+  #result .badge {
+    flex:none; min-width:46px; height:46px; padding:0 10px; border-radius:10px;
+    background:var(--signal); color:var(--ink); font-family:var(--num); font-weight:700; font-size:32px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #result .main { font-weight:600; font-size:18px; }
+  #result .sub { color:var(--muted); font-size:14px; }
+  #result.hint { color:var(--muted); font-size:15px; }
+
+  /* ---------- карта ---------- */
+  #stage { flex:1; min-height:360px; margin:10px; position:relative; background:var(--panel); border-radius:18px; overflow:hidden; border:1px solid #16293A; }
+  #map { position:absolute; top:0; left:0; width:100%; height:100%; display:block; touch-action:none; cursor:grab; user-select:none; -webkit-user-select:none; }
+  #map:active { cursor:grabbing; }
+  #reset {
+    position:absolute; right:12px; bottom:12px; border:0; border-radius:999px;
+    background:#1B2F42; color:#fff; border:1px solid #2B4660; font-family:var(--txt); font-weight:600; font-size:15px;
+    padding:10px 16px; cursor:pointer; box-shadow:0 6px 16px -6px rgba(0,0,0,.5);
+  }
+
+  .cell rect { fill:var(--cell); stroke:var(--cell-edge); stroke-width:1.5; transition:fill .2s; }
+  .cell text { fill:#E6F0FA; font-family:var(--num); font-weight:700; font-size:27px; text-anchor:middle; dominant-baseline:central; pointer-events:none; }
+  .cell { cursor:pointer; transition:opacity .25s; }
+  .has-hit .cell:not(.hit) { opacity:.32; }
+  .cell.hit rect { fill:var(--signal); stroke:#fff; stroke-width:3; filter:drop-shadow(0 0 14px rgba(255,196,0,.75)); }
+  .cell.hit text { fill:#0F1E2B; }
+  .cell.hit text { font-size:32px; }
+  .ring { fill:none; stroke:var(--signal); stroke-width:4; transform-box:fill-box; transform-origin:center; animation:ring 1.4s ease-out infinite; pointer-events:none; }
+  .ring.r2 { animation-delay:.7s; }
+  @keyframes ring { from { transform:scale(1); opacity:.95; } to { transform:scale(2.1,2.6); opacity:0; } }
+  .pill-t { fill:#fff; font-family:var(--txt); font-weight:600; font-size:15px; text-anchor:middle; dominant-baseline:central; pointer-events:none; }
+  .zone-t { fill:#fff; font-family:var(--txt); font-weight:600; font-size:17px; text-anchor:middle; dominant-baseline:central; pointer-events:none; }
+  .pass-t { fill:#C5D3E0; font-family:var(--txt); font-weight:600; font-size:17px; text-anchor:middle; dominant-baseline:central; pointer-events:none; }
+
+  @media (prefers-reduced-motion:reduce) { .ring { animation:none; opacity:.9; } .cell { transition:none; } }
+  @media (min-width:700px) { #q { font-size:60px; } header { padding-left:max(16px,calc(50vw - 420px)); padding-right:max(16px,calc(50vw - 420px)); } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="field">
+    <span>№</span>
+    <input id="q" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" placeholder="43" aria-label="Номер места">
+    <button id="clear" aria-label="Очистить">✕</button>
+  </div>
+  <div id="result" class="hint" aria-live="polite">Введи номер места — оно загорится на карте</div>
+</header>
+
+<div id="stage">
+  <svg id="map" xmlns="http://www.w3.org/2000/svg" aria-label="Карта мест"></svg>
+  <button id="reset">Вся карта</button>
+</div>
+
+<script>
+window.addEventListener('error', function (e) {
+  var r = document.getElementById('result');
+  if (r) { r.className = ''; r.textContent = 'Ошибка: ' + e.message; }
+});
+// Карта собрана по ровной сетке: колонки, общий шаг и одинаковые отступы (без наклона фото)
+const Y0 = 0;
+const W = 60;   // ширина ячейки
+
+const NS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('map');
+function el(tag, attrs, parent, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  (parent || svg).appendChild(e);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+// x — центр колонки, top — верх первой ячейки, p — шаг по вертикали,
+// line — линия, которая обслуживает колонку, pass — нижняя ячейка выходит в главный проход
+const COLS = [
+  // ниже главного прохода
+  {x:96,   top:300, p:73,   line:1, nums:[62,63,51,40]},
+  {x:240,  top:300, p:48,   line:1, nums:[58,20,19,54,33,64]},
+  {x:324,  top:300, p:67,   line:2, nums:[76,34,53,73,14]},
+  {x:468,  top:300, p:66,   line:2, nums:[22,28,39,24,38]},
+  {x:552,  top:300, p:66,   line:3, nums:[13,25,44,41,56]},
+  {x:696,  top:300, p:66,   line:3, nums:[23,18,32,55,61]},
+  {x:780,  top:300, p:46,   line:4, nums:[43,71,70,69,66,26,52,60]},
+  {x:924,  top:300, p:46,   line:4, nums:[80,35,11,12,42,36,47,49]},
+  {x:1068, top:24,  p:53,   line:5, nums:[29,21,30,17,48,27,45,59,31,67,46,68]},
+  // выше главного прохода
+  {x:117,  top:174, p:44,   line:0, pass:true, nums:[50]},
+  {x:187,  top:174, p:44,   line:0, pass:true, nums:[16]},
+  {x:257,  top:174, p:44,   line:0, pass:true, nums:[65]},
+  {x:327,  top:174, p:44,   line:0, pass:true, nums:[37]},
+  {x:468,  top:13,  p:68.5, line:2, pass:true, nums:[75,79,72]},
+  {x:552,  top:13,  p:68.5, line:3, pass:true, nums:[15,77,81]},
+  {x:696,  top:24,  p:64.5, line:3, pass:true, nums:[78,74,82]},
+  {x:780,  top:153, p:64.5, line:4, nums:[83]},
+  {x:780,  top:88.5, p:64.5, line:0, nums:[84]}
+];
+
+// стены между спинками колонок (58|76, 22|13, 23|43)
+const WALLS = [
+  {x:282, y1:300, y2:634},
+  {x:510, y1:300, y2:630},
+  {x:510, y1:13,  y2:216},
+  {x:738, y1:300, y2:666}
+];
+
+const LINES = [
+  {n:1, x:168,  color:'#F0553A', y1:264, y2:640, up:false},
+  {n:2, x:396,  color:'#3DC24D', y1:25,  y2:640, up:true},
+  {n:3, x:624,  color:'#A45BDB', y1:25,  y2:640, up:true},
+  {n:4, x:852,  color:'#4A8CFF', y1:158, y2:640, up:true},
+  {n:5, x:996,  color:'#FF8A2B', y1:25,  y2:640, up:true}
+];
+const lineByN = {};
+LINES.forEach(l => { lineByN[l.n] = l; });
+
+/* ---------- рисуем карту ---------- */
+const defs = el('defs', {});
+const pat = el('pattern', {id:'hatch', width:12, height:12, patternUnits:'userSpaceOnUse', patternTransform:'rotate(45)'}, defs);
+el('rect', {width:12, height:12, fill:'#152433'}, pat);
+el('rect', {width:5, height:12, fill:'#1D3145'}, pat);
+const pat2 = el('pattern', {id:'bars', width:14, height:14, patternUnits:'userSpaceOnUse'}, defs);
+el('rect', {width:14, height:14, fill:'#1A2F44'}, pat2);
+el('rect', {x:5, width:4, height:14, fill:'#25415C'}, pat2);
+
+// главный проход
+el('rect', {x:50, y:245, width:950, height:38, fill:'url(#hatch)'});
+el('polygon', {points:'1000,237 1034,264 1000,291', fill:'#1D3145'});
+el('rect', {x:648, y:252, width:180, height:24, rx:12, fill:'#0E1823'});
+el('text', {x:738, y:264, class:'pass-t'}, undefined, 'Главный проход');
+
+// клетки
+el('polygon', {points:'742,20 970,20 970,146 822,146 822,86 742,86', fill:'url(#bars)', stroke:'#25415C', 'stroke-width':2, 'stroke-linejoin':'round'});
+el('text', {x:896, y:83, class:'zone-t'}, undefined, 'Клетки');
+
+// стены другого цвета между колонками
+WALLS.forEach(w => {
+  el('rect', {x:w.x - 5, y:w.y1, width:10, height:w.y2 - w.y1, rx:2, fill:'#7C6A52', stroke:'#A28C6E', 'stroke-width':1.5});
+});
+
+// линии
+LINES.forEach(l => {
+  el('line', {x1:l.x, x2:l.x, y1:l.y1, y2:l.y2, stroke:l.color, 'stroke-width':6, 'stroke-linecap':'round'});
+  el('polygon', {points:`${l.x},${l.y2+16} ${l.x-11},${l.y2-2} ${l.x+11},${l.y2-2}`, fill:l.color});
+  if (l.up) el('polygon', {points:`${l.x},${l.y1-16} ${l.x-11},${l.y1+2} ${l.x+11},${l.y1+2}`, fill:l.color});
+  el('rect', {x:l.x-46, y:676, width:92, height:28, rx:14, fill:l.color});
+  el('text', {x:l.x, y:691, class:'pill-t'}, undefined, 'Линия ' + l.n);
+});
+
+// засечки: от линии (или прохода) к каждой ячейке
+COLS.forEach(col => {
+  col.nums.forEach((n, i) => {
+    const h = col.p - 3, y = col.top + i * col.p, cy = y + h / 2;
+    const last = i === col.nums.length - 1;
+    if (col.pass && last) {
+      el('line', {x1:col.x, x2:col.x, y1:y + h, y2:245, stroke:'#F0553A', 'stroke-width':2, opacity:.85});
+    } else if (col.line) {
+      const L = lineByN[col.line];
+      const edge = col.x + (L.x > col.x ? W / 2 : -W / 2);
+      el('line', {x1:edge, x2:L.x, y1:cy, y2:cy, stroke:L.color, 'stroke-width':2, opacity:.85});
+    }
+  });
+});
+
+// ячейки
+const cellsG = el('g', {id:'cells'});
+const byNum = {};
+COLS.forEach(col => {
+  col.nums.forEach((n, i) => {
+    const h = col.p - 3, y = col.top + i * col.p;
+    const g = el('g', {class:'cell', 'data-n':n}, cellsG);
+    el('rect', {x:col.x - W / 2, y, width:W, height:h, rx:6}, g);
+    el('text', {x:col.x, y:y + h / 2 + 1}, g, String(n));
+    byNum[n] = {g, x:col.x, y:y + h / 2, w:W, h};
+  });
+});
+const overlay = el('g', {});
+
+/* ---------- камера (viewBox) ---------- */
+const FULL = {cx:574, cy:358, w:1090, h:716};
+let view = {x:0, y:0, w:100, h:100};
+let mode = 'full';
+let anim = null;
+
+const size = () => ({cw: svg.clientWidth || 1, ch: svg.clientHeight || 1});
+function fullW() { const {cw,ch} = size(); return Math.max(FULL.w, FULL.h * cw / ch); }
+function fitView(cx, cy, w) {
+  const {cw,ch} = size(); const h = w * ch / cw;
+  return {x:cx - w/2, y:cy - h/2, w, h};
+}
+function apply() { svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`); }
+function cancelAnim() { if (anim) cancelAnimationFrame(anim); anim = null; }
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function flyTo(target, ms = 550) {
+  cancelAnim();
+  if (reduce) { view = target; apply(); return; }
+  const from = {...view}, t0 = performance.now();
+  const ease = t => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2;
+  (function step(now) {
+    const k = Math.min(1, (now - t0) / ms), e = ease(k);
+    view = {
+      x: from.x + (target.x - from.x) * e,
+      y: from.y + (target.y - from.y) * e,
+      w: from.w + (target.w - from.w) * e,
+      h: from.h + (target.h - from.h) * e
+    };
+    apply();
+    anim = k < 1 ? requestAnimationFrame(step) : null;
+  })(t0);
+}
+function showAll() { mode = 'full'; const w = fullW(); flyTo(fitView(FULL.cx, FULL.cy, w)); }
+function focusOn(x, y) {
+  mode = 'focus';
+  const w = Math.min(430, fullW());
+  flyTo(fitView(x, y - Y0, w));
+}
+
+/* ---------- жесты: тянуть, щипок, колесо, тап по ячейке ---------- */
+const ptrs = new Map();
+let moved = false, start = null;
+
+function zoomAt(px, py, f) {
+  const r = svg.getBoundingClientRect(), {cw} = size();
+  const s = view.w / cw;
+  const ux = view.x + (px - r.left) * s, uy = view.y + (py - r.top) * s;
+  const nw = Math.min(fullW(), Math.max(170, view.w * f));
+  const k = nw / view.w;
+  const {cw:cw2, ch} = size();
+  view = {x: ux - (ux - view.x) * k, y: uy - (uy - view.y) * k, w: nw, h: nw * ch / cw2};
+  apply();
+}
+
+svg.addEventListener('pointerdown', e => {
+  cancelAnim();
+  svg.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if (ptrs.size === 1) { moved = false; start = {x:e.clientX, y:e.clientY}; }
+});
+svg.addEventListener('pointermove', e => {
+  const prev = ptrs.get(e.pointerId);
+  if (!prev) return;
+  if (ptrs.size === 1) {
+    const s = view.w / size().cw;
+    view.x -= (e.clientX - prev.x) * s;
+    view.y -= (e.clientY - prev.y) * s;
+    apply();
+    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 6) { moved = true; mode = 'free'; }
+  } else if (ptrs.size === 2) {
+    const other = [...ptrs.entries()].find(([id]) => id !== e.pointerId)[1];
+    const oldD = Math.hypot(prev.x - other.x, prev.y - other.y) || 1;
+    const newD = Math.hypot(e.clientX - other.x, e.clientY - other.y) || 1;
+    zoomAt((e.clientX + other.x) / 2, (e.clientY + other.y) / 2, oldD / newD);
+    moved = true; mode = 'free';
+  }
+  ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+});
+function endPtr(e) {
+  if (!ptrs.has(e.pointerId)) return;
+  if (!moved && ptrs.size === 1 && e.type === 'pointerup') {
+    const t = document.elementFromPoint(e.clientX, e.clientY);
+    const c = t && t.closest && t.closest('.cell');
+    if (c) { q.value = c.dataset.n; search(false); }
+  }
+  ptrs.delete(e.pointerId);
+}
+svg.addEventListener('pointerup', endPtr);
+svg.addEventListener('pointercancel', endPtr);
+svg.addEventListener('wheel', e => {
+  e.preventDefault(); cancelAnim(); mode = 'free';
+  zoomAt(e.clientX, e.clientY, e.deltaY > 0 ? 1.15 : 1 / 1.15);
+}, {passive:false});
+
+/* ---------- поиск ---------- */
+const q = document.getElementById('q');
+const clearBtn = document.getElementById('clear');
+const result = document.getElementById('result');
+let hit = null;
+
+function describe(n) {
+  const c = byNum[n];
+  const left = LINES.filter(l => l.x < c.x).pop();
+  const right = LINES.find(l => l.x > c.x);
+  let main;
+  if (left && right) main = `Между линиями ${left.n} и ${right.n}`;
+  else if (right) main = `Слева от линии ${right.n}`;
+  else main = `Справа от линии ${left.n}`;
+  const near = LINES.reduce((a, b) => Math.abs(b.x - c.x) < Math.abs(a.x - c.x) ? b : a);
+  const parts = [`ближе к линии ${near.n}`];
+  if (c.y < 245 && c.x < 1030) parts.push('выше главного прохода');
+  else if (c.x < 1030) parts.push('ниже главного прохода');
+  return {main, sub: parts.join(' · ')};
+}
+
+function clearHit() {
+  hit = null;
+  while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+  cellsG.querySelectorAll('.hit').forEach(g => g.classList.remove('hit'));
+  svg.classList.remove('has-hit');
+}
+
+function search(fly = true) {
+  const raw = q.value.replace(/\D/g, '');
+  if (q.value !== raw) q.value = raw;
+  clearBtn.style.display = raw ? 'block' : 'none';
+  clearHit();
+  result.className = '';
+  if (!raw) {
+    result.className = 'hint';
+    result.textContent = 'Введи номер места — оно загорится на карте';
+    if (mode !== 'full') showAll();
+    return;
+  }
+  const n = parseInt(raw, 10);
+  const c = byNum[n];
+  if (!c) {
+    result.className = 'hint';
+    result.textContent = (raw.length >= 2) ? `Места ${raw} нет на карте` : 'Ищу…';
+    return;
+  }
+  hit = n;
+  c.g.classList.add('hit');
+  svg.classList.add('has-hit');
+  // поднять наверх, чтобы не перекрывали соседи
+  cellsG.appendChild(c.g);
+  ['ring', 'ring r2'].forEach(cls => el('rect', {
+    class:cls, x:c.x - c.w/2, y:c.y - c.h/2, width:c.w, height:c.h, rx:6
+  }, overlay));
+  const d = describe(n);
+  result.innerHTML = '';
+  const b = document.createElement('div'); b.className = 'badge'; b.textContent = n;
+  const t = document.createElement('div');
+  t.innerHTML = `<div class="main">${d.main}</div><div class="sub">${d.sub}</div>`;
+  result.append(b, t);
+  focusOn(c.x, c.y);
+  if (raw.length >= 2 && document.activeElement === q) q.blur();
+}
+
+q.addEventListener('input', () => search());
+q.addEventListener('keydown', e => { if (e.key === 'Enter') q.blur(); });
+clearBtn.addEventListener('click', () => { q.value = ''; search(); q.focus(); });
+document.getElementById('reset').addEventListener('click', () => {
+  if (hit && mode === 'full') focusOn(byNum[hit].x, byNum[hit].y); else showAll();
+});
+
+let rt;
+function onResize() {
+  clearTimeout(rt);
+  rt = setTimeout(() => {
+    if (mode === 'focus' && hit) { view = fitView(byNum[hit].x, byNum[hit].y - Y0, Math.min(430, fullW())); apply(); }
+    else if (mode === 'full') { view = fitView(FULL.cx, FULL.cy, fullW()); apply(); }
+  }, 80);
+}
+addEventListener('resize', onResize);
+addEventListener('load', onResize);
+if (window.ResizeObserver) new ResizeObserver(onResize).observe(document.getElementById('stage'));
+
+view = fitView(FULL.cx, FULL.cy, fullW());
+apply();
+</script>
+</body>
+</html>
