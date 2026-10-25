@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0B151F">
-<title>Карта мест</title>
+<title>מפת מקומות</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -41,6 +41,11 @@
     padding:0; caret-color:var(--signal);
   }
   #q::placeholder { color:#4A6075; font-weight:600; }
+  .lang { display:flex; gap:6px; margin-bottom:10px; justify-content:flex-end; }
+  .lang button { min-width:44px; height:30px; padding:0 10px; border-radius:15px; border:1px solid #2B4660; background:transparent; color:var(--muted); font-family:var(--txt); font-weight:600; font-size:14px; cursor:pointer; }
+  .lang button.on { background:var(--signal); border-color:var(--signal); color:#0F1E2B; }
+  .lang button:focus-visible { outline:3px solid var(--signal); outline-offset:2px; }
+  #map { direction:ltr; }
   #clear {
     width:36px; height:36px; border-radius:50%; border:0; background:#1B2F42; color:#fff;
     font-size:18px; cursor:pointer; display:none; flex:none;
@@ -87,24 +92,51 @@
 <body>
 
 <header>
+  <div class="lang" role="group" aria-label="Language">
+    <button type="button" data-l="he">עב</button>
+    <button type="button" data-l="ru">RU</button>
+    <button type="button" data-l="en">EN</button>
+  </div>
   <div class="field">
     <span>№</span>
-    <input id="q" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" placeholder="43" aria-label="Номер места">
-    <button id="clear" aria-label="Очистить">✕</button>
+    <input id="q" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" placeholder="43" aria-label="מספר מקום">
+    <button id="clear" aria-label="נקה">✕</button>
   </div>
-  <div id="result" class="hint" aria-live="polite">Введи номер места — оно загорится на карте</div>
+  <div id="result" class="hint" aria-live="polite">הזינו מספר מקום — הוא יואר במפה</div>
 </header>
 
 <div id="stage">
-  <svg id="map" xmlns="http://www.w3.org/2000/svg" aria-label="Карта мест"></svg>
-  <button id="reset">Вся карта</button>
+  <svg id="map" xmlns="http://www.w3.org/2000/svg" aria-label="מפת מקומות"></svg>
+  <button id="reset">כל המפה</button>
 </div>
 
 <script>
 window.addEventListener('error', function (e) {
   var r = document.getElementById('result');
-  if (r) { r.className = ''; r.textContent = 'Ошибка: ' + e.message; }
+  if (r) { r.className = ''; r.textContent = 'Error: ' + e.message; }
 });
+/* ---------- языки: иврит (по умолчанию), русский, английский ---------- */
+const I18N = {
+  he: {dir:'rtl', title:'מפת מקומות', numAria:'מספר מקום', clear:'נקה', reset:'כל המפה',
+       hint:'הזינו מספר מקום — הוא יואר במפה', pass:'מעבר ראשי', cages:'כלובים', line:'קו',
+       between:(a,b)=>`בין קו ${a} לקו ${b}`, leftOf:n=>`משמאל לקו ${n}`, rightOf:n=>`מימין לקו ${n}`,
+       near:n=>`קרוב יותר לקו ${n}`, above:'מעל המעבר הראשי', below:'מתחת למעבר הראשי',
+       miss:n=>`מקום ${n} לא נמצא במפה`, wait:'מחפש…'},
+  ru: {dir:'ltr', title:'Карта мест', numAria:'Номер места', clear:'Очистить', reset:'Вся карта',
+       hint:'Введи номер места — оно загорится на карте', pass:'Главный проход', cages:'Клетки', line:'Линия',
+       between:(a,b)=>`Между линиями ${a} и ${b}`, leftOf:n=>`Слева от линии ${n}`, rightOf:n=>`Справа от линии ${n}`,
+       near:n=>`ближе к линии ${n}`, above:'выше главного прохода', below:'ниже главного прохода',
+       miss:n=>`Места ${n} нет на карте`, wait:'Ищу…'},
+  en: {dir:'ltr', title:'Seat map', numAria:'Place number', clear:'Clear', reset:'Whole map',
+       hint:'Enter a place number — it will light up on the map', pass:'Main passage', cages:'Cages', line:'Line',
+       between:(a,b)=>`Between lines ${a} and ${b}`, leftOf:n=>`Left of line ${n}`, rightOf:n=>`Right of line ${n}`,
+       near:n=>`closer to line ${n}`, above:'above the main passage', below:'below the main passage',
+       miss:n=>`Place ${n} isn't on the map`, wait:'Searching…'}
+};
+let lang = 'he';
+try { const saved = localStorage.getItem('lang'); if (I18N[saved]) lang = saved; } catch (e) {}
+const T = () => I18N[lang];
+
 // Карта собрана по ровной сетке: колонки, общий шаг и одинаковые отступы (без наклона фото)
 const Y0 = 0;
 const W = 60;   // ширина ячейки
@@ -175,11 +207,11 @@ el('rect', {x:5, width:4, height:14, fill:'#25415C'}, pat2);
 el('rect', {x:50, y:245, width:950, height:38, fill:'url(#hatch)'});
 el('polygon', {points:'1000,237 1034,264 1000,291', fill:'#1D3145'});
 el('rect', {x:648, y:252, width:180, height:24, rx:12, fill:'#0E1823'});
-el('text', {x:738, y:264, class:'pass-t'}, undefined, 'Главный проход');
+const passT = el('text', {x:738, y:264, class:'pass-t'}, undefined, '');
 
 // клетки
 el('polygon', {points:'742,20 970,20 970,146 822,146 822,86 742,86', fill:'url(#bars)', stroke:'#25415C', 'stroke-width':2, 'stroke-linejoin':'round'});
-el('text', {x:896, y:83, class:'zone-t'}, undefined, 'Клетки');
+const zoneT = el('text', {x:896, y:83, class:'zone-t'}, undefined, '');
 
 // стены другого цвета между колонками
 WALLS.forEach(w => {
@@ -187,12 +219,13 @@ WALLS.forEach(w => {
 });
 
 // линии
+const pillTexts = [];
 LINES.forEach(l => {
   el('line', {x1:l.x, x2:l.x, y1:l.y1, y2:l.y2, stroke:l.color, 'stroke-width':6, 'stroke-linecap':'round'});
   el('polygon', {points:`${l.x},${l.y2+16} ${l.x-11},${l.y2-2} ${l.x+11},${l.y2-2}`, fill:l.color});
   if (l.up) el('polygon', {points:`${l.x},${l.y1-16} ${l.x-11},${l.y1+2} ${l.x+11},${l.y1+2}`, fill:l.color});
   el('rect', {x:l.x-46, y:676, width:92, height:28, rx:14, fill:l.color});
-  el('text', {x:l.x, y:691, class:'pill-t'}, undefined, 'Линия ' + l.n);
+  pillTexts.push([l.n, el('text', {x:l.x, y:691, class:'pill-t'}, undefined, '')]);
 });
 
 // засечки: от линии (или прохода) к каждой ячейке
@@ -326,18 +359,36 @@ const result = document.getElementById('result');
 let hit = null;
 
 function describe(n) {
-  const c = byNum[n];
+  const c = byNum[n], d = T();
   const left = LINES.filter(l => l.x < c.x).pop();
   const right = LINES.find(l => l.x > c.x);
   let main;
-  if (left && right) main = `Между линиями ${left.n} и ${right.n}`;
-  else if (right) main = `Слева от линии ${right.n}`;
-  else main = `Справа от линии ${left.n}`;
+  if (left && right) main = d.between(left.n, right.n);
+  else if (right) main = d.leftOf(right.n);
+  else main = d.rightOf(left.n);
   const near = LINES.reduce((a, b) => Math.abs(b.x - c.x) < Math.abs(a.x - c.x) ? b : a);
-  const parts = [`ближе к линии ${near.n}`];
-  if (c.y < 245 && c.x < 1030) parts.push('выше главного прохода');
-  else if (c.x < 1030) parts.push('ниже главного прохода');
+  const parts = [d.near(near.n)];
+  if (c.y < 245 && c.x < 1030) parts.push(d.above);
+  else if (c.x < 1030) parts.push(d.below);
   return {main, sub: parts.join(' · ')};
+}
+
+function showHint() { result.className = 'hint'; result.textContent = T().hint; }
+function showMiss(raw) { result.className = 'hint'; result.textContent = (raw.length >= 2) ? T().miss(raw) : T().wait; }
+function showHit(n) {
+  const d = describe(n);
+  result.className = '';
+  result.innerHTML = '';
+  const b = document.createElement('div'); b.className = 'badge'; b.textContent = n;
+  const t = document.createElement('div');
+  t.innerHTML = `<div class="main">${d.main}</div><div class="sub">${d.sub}</div>`;
+  result.append(b, t);
+}
+function refreshResult() {
+  const raw = q.value.replace(/\D/g, '');
+  if (!raw) showHint();
+  else if (hit) showHit(hit);
+  else showMiss(raw);
 }
 
 function clearHit() {
@@ -354,16 +405,14 @@ function search(fly = true) {
   clearHit();
   result.className = '';
   if (!raw) {
-    result.className = 'hint';
-    result.textContent = 'Введи номер места — оно загорится на карте';
+    showHint();
     if (mode !== 'full') showAll();
     return;
   }
   const n = parseInt(raw, 10);
   const c = byNum[n];
   if (!c) {
-    result.className = 'hint';
-    result.textContent = (raw.length >= 2) ? `Места ${raw} нет на карте` : 'Ищу…';
+    showMiss(raw);
     return;
   }
   hit = n;
@@ -374,12 +423,7 @@ function search(fly = true) {
   ['ring', 'ring r2'].forEach(cls => el('rect', {
     class:cls, x:c.x - c.w/2, y:c.y - c.h/2, width:c.w, height:c.h, rx:6
   }, overlay));
-  const d = describe(n);
-  result.innerHTML = '';
-  const b = document.createElement('div'); b.className = 'badge'; b.textContent = n;
-  const t = document.createElement('div');
-  t.innerHTML = `<div class="main">${d.main}</div><div class="sub">${d.sub}</div>`;
-  result.append(b, t);
+  showHit(n);
   focusOn(c.x, c.y);
   if (raw.length >= 2 && document.activeElement === q) q.blur();
 }
@@ -402,6 +446,32 @@ function onResize() {
 addEventListener('resize', onResize);
 addEventListener('load', onResize);
 if (window.ResizeObserver) new ResizeObserver(onResize).observe(document.getElementById('stage'));
+
+const langBtns = [...document.querySelectorAll('.lang button')];
+function setLang(l) {
+  if (!I18N[l]) return;
+  lang = l;
+  try { localStorage.setItem('lang', l); } catch (e) {}
+  const d = I18N[l];
+  document.documentElement.lang = l;
+  document.documentElement.dir = d.dir;
+  document.title = d.title;
+  q.setAttribute('aria-label', d.numAria);
+  clearBtn.setAttribute('aria-label', d.clear);
+  svg.setAttribute('aria-label', d.title);
+  document.getElementById('reset').textContent = d.reset;
+  passT.textContent = d.pass;
+  zoneT.textContent = d.cages;
+  pillTexts.forEach(([n, node]) => { node.textContent = d.line + ' ' + n; });
+  langBtns.forEach(b => {
+    const on = b.dataset.l === l;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  refreshResult();
+}
+langBtns.forEach(b => b.addEventListener('click', () => setLang(b.dataset.l)));
+setLang(lang);
 
 view = fitView(FULL.cx, FULL.cy, fullW());
 apply();
